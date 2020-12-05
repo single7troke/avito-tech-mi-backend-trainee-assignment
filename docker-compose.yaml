@@ -1,0 +1,29 @@
+version: '3.6'
+
+services:
+
+  web:
+    build: ./application
+    container_name: new_avito_parser
+    ports:
+      - "9000:8000"
+    depends_on:
+      - db
+    command: bash -c "uvicorn main:app --host 0.0.0.0 --port 8000"
+    restart: always
+
+  db:
+    image: postgres:12.0-alpine
+    container_name: avito_parser_data
+    volumes:
+      - ./avito_db/:/var/lib/postgresql/data/
+    env_file: .env
+
+  statistic:
+    build: ./statistic_parser
+    container_name: new_avito_statistic
+    depends_on:
+      - web
+      - db
+    command: bash -c "python count_update.py"
+    restart: always
