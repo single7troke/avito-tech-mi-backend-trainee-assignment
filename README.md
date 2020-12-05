@@ -1,17 +1,19 @@
 # avito-tech-mi-backend-trainee-assignment
-Test task for the position of intern-backend
+   Test task for the position of intern-backend
 
-##Описание:
+
+## Описание:
 Сервис следит за изменением количества объявлений.<br>
 В начале каждого часа сервис добавляет в базу данных<br>
 колличество лотов по определённому поисковому запросу и региону,<br>
 а также топ пять объявлений.
 
+
 ## Ссылка на задание
    [Задание](https://github.com/avito-tech/mi-backend-trainee-assignment)
 
 
-##Опиание методов
+## Опиание методов
    - /add
      - принимает на вход<br>
      <b>search_phrase</b> - поисковую фразу<br>
