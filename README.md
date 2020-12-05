@@ -8,7 +8,8 @@ Test task for the position of intern-backend
 а также топ пять объявлений.
 
 ## Ссылка на задание
-[Задание](https://github.com/avito-tech/mi-backend-trainee-assignment)
+   [Задание](https://github.com/avito-tech/mi-backend-trainee-assignment)
+
 
 ##Опиание методов
    - /add
