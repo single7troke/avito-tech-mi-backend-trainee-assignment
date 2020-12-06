@@ -38,6 +38,7 @@ class Statistics(Base):
 
     owner = relationship("AvitoSearch", back_populates="items")
 
+
 class TopFive(Base):
     __tablename__ = "topfive"
 

@@ -1,9 +1,9 @@
-import parser
-import requests
+from parser import get_locationId, take_count
+from get_count import get_count_statistic, get_top_five
+from validation import time_validation, region_validation, already_in_db, locationId_already_in_db, search_id_not_in_db
 
 from pydantic import BaseModel, Field
-from datetime import datetime, timedelta
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, engine, Base
@@ -22,37 +22,38 @@ def get_db():
         db.close()
 
 
+def first_count_update(locationId, search_phrase, owner_id, db):
+    count = take_count(locationId, search_phrase)
+    first_search_count = Statistics(count=count, owner_id=owner_id)
+    db.add(first_search_count)
+    db.commit()
+
+
 class Add(BaseModel):
     search_phrase: str = Field(..., example="Микроволновая печь")
     region: str = Field(..., example="moskva")
 
 
-class Stat(BaseModel):
-    search_id: int = Field(..., example=1)
-    start: str = Field(None, example="2020-12-12T00")
-    stop: str = Field(None, example="2020-12-12T23")
-
-
-class Top5(BaseModel):
-    search_id: int = Field(..., example=1)
-    time: str = Field(None, example="2020-12-12T03")
-
-
 @app.post("/add")
-def add(input_data: Add, db: Session = Depends(get_db)):
-    region = input_data.region.lower()
-    if requests.get(f"https://www.avito.ru/{region}").status_code == 404:
+def add(input_data: Add, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Метод добавляет в базу данных связку search_phrase + region\n
+
+    :param input_data:
+    - search_phrase: (str) = поисковая фраза
+    - region: (str) =  регион поиска (регион вводится транслитом москва = moskva, россия = rossiya)\n
+    :param background: запускает функцию first_count_update\n
+    :return: (dict) =  {"id": id созданной связки}\n
+    """
+    region = region_validation(input_data.region)
+    if region == 404:
         raise HTTPException(status_code=404, detail="Invalid region")
 
-    locationId = parser.Parser().get_locationId(region)
-    count = parser.Parser().take_count(locationId, input_data.search_phrase)
-    locationId_already_in_db = db.query(Location.locationId).filter_by(locationId=locationId).scalar()
+    if already_in_db(input_data.search_phrase, region, db):
+        return {"message": f"combination of '{input_data.search_phrase} + {region}' already in db"}
 
-    if not locationId_already_in_db:
-        new_location = Location(locationId=locationId, region_name=region)
-        db.add(new_location)
-        db.commit()
-        db.refresh(new_location)
+    locationId = get_locationId(region)
+    locationId_already_in_db(locationId, region, db)
 
     location = db.query(Location).filter(Location.locationId == locationId).first()
     new_search = AvitoSearch(search_phrase=input_data.search_phrase, region=region, location_id=location.locationId)
@@ -60,70 +61,57 @@ def add(input_data: Add, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_search)
 
-    first_search_count = Statistics(count=count, owner_id=new_search.id)
-    db.add(first_search_count)
-    db.commit()
+    background.add_task(first_count_update, locationId, input_data.search_phrase, new_search.id, db)
 
     return {"id": new_search.id}
 
 
-@app.post("/stat")
-def stat(input_data: Stat, db: Session = Depends(get_db)):
-    result: dict = {}
-    search_id_in_db = db.query(AvitoSearch).filter_by(id=input_data.search_id).scalar()
-    if not search_id_in_db:
-        raise HTTPException(status_code=404, detail="Invalid id")
+@app.get("/stat")
+def stat(search_id: int = Query(..., example=1),
+         start: str = Query(None, example="2020-12-12T00"),
+         stop: str = Query(None, example="2020-12-12T23"),
+         db: Session = Depends(get_db)):
+    """
+    Метод возвращает счётчики и соответствующие им временные метки (timestamp) в определенном промежутке времени,\n
+    в зависимости от аргументов start и stop\n
 
-    if input_data.start and input_data.stop:
-        try:
-            start_time = datetime.strptime(input_data.start, "%Y-%m-%dT%H")
-            stop_time = datetime.strptime(input_data.stop, "%Y-%m-%dT%H") + timedelta(hours=1)
-        except ValueError:
-            return {"error": "time data does not match format '%Y-%m-%dT%H'"}
+    :param search_id: (int) = id связки search_phrase + region\n
+    :param start: (str) = время в формате '%Y-%m-%dT%H' (необязательный)\n
+    :param stop: (str) = время в формате '%Y-%m-%dT%H' (необязательный)\n
+    :return: (dict) = {"timestamp": count}
+    """
 
-        searches = db.query(Statistics).filter(Statistics.owner_id == input_data.search_id,
-                                               Statistics.timestamp >= start_time,
-                                               Statistics.timestamp <= stop_time)
-
-    elif input_data.start and not input_data.stop:
-        try:
-            start_time = datetime.strptime(input_data.start, "%Y-%m-%dT%H")
-        except ValueError:
-            return {"error": "time data does not match format '%Y-%m-%dT%H'"}
-        searches = db.query(Statistics).filter(Statistics.owner_id == input_data.search_id,
-                                               Statistics.timestamp >= start_time)
-
-    elif not input_data.start and input_data.stop:
-        try:
-            stop_time = datetime.strptime(input_data.stop, "%Y-%m-%dT%H") + timedelta(hours=1)
-        except ValueError:
-            return {"error": "time data does not match format '%Y-%m-%dT%H'"}
-        searches = db.query(Statistics).filter(Statistics.owner_id == input_data.search_id,
-                                               Statistics.timestamp <= stop_time)
-    else:
-        searches = db.query(Statistics).filter_by(owner_id=input_data.search_id)
-
-    for i in searches:
-        result.update({i.timestamp: i.count})
-
-    return result
-
-
-@app.post("/top5")
-def get_top_five(input_data: Top5, db: Session = Depends(get_db)):
-    top_urls = []
-    search_id_in_db = db.query(AvitoSearch).filter_by(id=input_data.search_id).scalar()
-
-    if not search_id_in_db:
+    if search_id_not_in_db(search_id, db):
         raise HTTPException(status_code=404, detail="Invalid id")
 
     try:
-        search_time = datetime.strptime(input_data.time, "%Y-%m-%dT%H")
-        top = db.query(TopFive).filter(TopFive.owner_id == input_data.search_id, TopFive.timestamp >= search_time).first()
-        for id_from_top in top.topfive:
-            top_urls.append(f"https://www.avito.ru/{id_from_top}")
-        return {"top five": top_urls}
-    except AttributeError:
-        return {}
+        start, stop = time_validation(start, stop)
     except ValueError:
         return {"error": "time data does not match format '%Y-%m-%dT%H'"}
+
+    statistic_data = get_count_statistic(search_id, start, stop, db)
+
+    result: dict = {}
+    for item in statistic_data:
+        result.update({item.timestamp: item.count})
+    return result
+
+
+@app.get("/top5")
+def top_five(search_id: int = Query(..., example=1),
+             time: str = Query(None, example="2020-12-12T03"),
+             db: Session = Depends(get_db)):
+    """
+    Метод возвращает список с сылками(в формате https://www.avito.ru/id_объявления) на топ пять объявлений\n
+    временная метка списка болеше или равна значению аргумента time\n
+
+    :param search_id: (int) = id связки search_phrase + region\n
+    :param time: (str) = время в формате '%Y-%m-%dT%H'\n
+    :return: (list) = [https://www.avito.ru/id_объявления]
+    """
+
+    if search_id_not_in_db(search_id, db):
+        raise HTTPException(status_code=404, detail="Invalid id")
+
+    response = get_top_five(search_id, time, db)
+    return response
