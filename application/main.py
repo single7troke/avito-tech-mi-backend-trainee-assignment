@@ -35,11 +35,10 @@ class Add(BaseModel):
     region: str = Field(...,  example="moskva")
 
 
-@app.post("/add", response_model=AddResponse)
+@app.post("/add", response_model=AddResponse, tags=["add"])
 def add(input_data: Add, background: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Сохраняет количество объявлений по поисковой фразе.
-    :return:
     """
     region = region_validation(input_data.region)
     if region == 404:
@@ -49,6 +48,8 @@ def add(input_data: Add, background: BackgroundTasks, db: Session = Depends(get_
         raise HTTPException(status_code=422, detail="combination of '{input_data.search_phrase} + {region}' already in db")
 
     locationId = get_locationId(region)
+    if type(locationId) != int:
+        raise HTTPException(status_code=404, detail=f"avito.ru unavailable, error code = {locationId.status_code}")
     locationId_already_in_db(locationId, region, db)
 
     location = db.query(Location).filter(Location.locationId == locationId).first()
@@ -62,19 +63,13 @@ def add(input_data: Add, background: BackgroundTasks, db: Session = Depends(get_
     return {"id": new_search.id}
 
 
-@app.get("/stat", response_model=StatResponse)
-def stat(search_id: int = Query(..., example=1),
-         start: str = Query(None, example="2020-12-12T00", max_length=13),
-         stop: str = Query(None, example="2020-12-12T23", max_length=13),
+@app.get("/stat", response_model=StatResponse, tags=["statistic"])
+def stat(search_id: int = Query(..., example="id связки search_phrase + region"),
+         start: str = Query(None, example="время в формате '%Y-%m-%dT%H'", max_length=13),
+         stop: str = Query(None, example="время в формате '%Y-%m-%dT%H'", max_length=13),
          db: Session = Depends(get_db)):
     """
-    Метод возвращает счётчики и соответствующие им временные метки (timestamp) в определенном промежутке времени,\n
-    в зависимости от аргументов start и stop\n
-
-    :param search_id: (int) = id связки search_phrase + region\n
-    :param start: (str) = время в формате '%Y-%m-%dT%H' (необязательный)\n
-    :param stop: (str) = время в формате '%Y-%m-%dT%H' (необязательный)\n
-    :return: (dict) = {"timestamp": count}
+    Возвращает счетчики и соответствующие им временные метки (timestamp) в заданном промежутке времени.
     """
 
     if search_id_not_in_db(search_id, db):
@@ -83,8 +78,6 @@ def stat(search_id: int = Query(..., example=1),
     valid_stop = time_validation(stop)
     if valid_start == "error" or valid_stop == "error":
         raise HTTPException(status_code=422, detail="time does not match format '%Y-%m-%dT%H'")
-    print(valid_start, type(valid_start))
-    print(valid_stop, type(valid_stop))
     statistic_data = get_count_statistic(search_id, valid_start, valid_stop, db)
 
     result: dict = {}
@@ -93,16 +86,12 @@ def stat(search_id: int = Query(..., example=1),
     return {"statistic": result}
 
 
-@app.get("/top5", response_model=Top5Response)
-def top_five(search_id: int = Query(..., example=1),
-             time: str = Query(..., example="2020-12-12T03", max_length=13),
+@app.get("/top5", response_model=Top5Response, tags=["statistic"])
+def top_five(search_id: int = Query(..., example="id связки search_phrase + region"),
+             time: str = Query(..., example="время в формате '%Y-%m-%dT%H'", max_length=13),
              db: Session = Depends(get_db)):
     """
-    Метод возвращает список со ссылками на топ пять объявлений\n
-
-    :param search_id: (int) = id связки search_phrase + region\n
-    :param time: (str) = время в формате '%Y-%m-%dT%H'\n
-    :return: (list) = [https://www.avito.ru/id_объявления] (временная метка списка болеше или равна значению аргумента time)
+    Возвращает список со ссылками на первые пять объявлений по данному запросу.
     """
 
     if search_id_not_in_db(search_id, db):
