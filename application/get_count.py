@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
+from sqlalchemy import extract
 from models import AvitoSearch, Statistics, Location, TopFive
 
 
@@ -21,12 +22,13 @@ def get_count_statistic(search_id, start, stop, db):
 def get_top_five(search_id, time, db):
 	top_urls = []
 	try:
-		search_time = datetime.strptime(time, "%Y-%m-%dT%H")
-		top = db.query(TopFive).filter(TopFive.owner_id == search_id, TopFive.timestamp >= search_time).first()
+		top = db.query(TopFive).filter(TopFive.owner_id == search_id,
+		                               extract("year", TopFive.timestamp) == time.year,
+		                               extract("month", TopFive.timestamp) == time.month,
+		                               extract("day", TopFive.timestamp) == time.day,
+		                               extract("hour", TopFive.timestamp) == time.hour).first()
 		for id_from_top in top.topfive:
 			top_urls.append(f"https://www.avito.ru/{id_from_top}")
-		return top_urls
+		return [str(top.timestamp), top_urls]
 	except AttributeError:
-		return {}
-	except ValueError:
-		return {"error": "time data does not match format '%Y-%m-%dT%H'"}
+		return {"message": f"nothing found for the combination of id = {search_id} and time = {time}"}
