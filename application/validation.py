@@ -33,17 +33,11 @@ def region_validation(region):
 	return region
 
 
-def time_validation(start, stop):
-	start_time = start
-	stop_time = stop
-	if start:
+def time_validation(time):
+	if time:
 		try:
-			start_time = datetime.datetime.strptime(start, "%Y-%m-%dT%H")
+			valid_time = datetime.datetime.strptime(time, "%Y-%m-%dT%H")
+			return valid_time
 		except ValueError:
-			return ["error"]
-	if stop:
-		try:
-			stop_time = datetime.datetime.strptime(stop, "%Y-%m-%dT%H")
-		except ValueError:
-			return ["error"]
-	return [start_time, stop_time]
+			return "error"
+	return time
