@@ -14,6 +14,8 @@ def get_locationId(region: str):
     locationId = ""
     url = f"https://avito.ru/{region}"
     response = session.get(url)
+    if response.status_code != 200:
+        return response
     soup = bs.BeautifulSoup(response.text, "lxml")
     string = soup.find(rel="alternate").get("href")
     for i in string[::-1]:
