@@ -59,4 +59,5 @@
           ```
 ## Запуск приложения (How to run)
    - git clone https://github.com/single7troke/avito-tech-mi-backend-trainee-assignment
+   - cd avito-tech-mi-backend-trainee-assignment
    - docker-compose up -d
