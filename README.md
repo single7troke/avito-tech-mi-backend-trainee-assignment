@@ -61,3 +61,4 @@
    - git clone https://github.com/single7troke/avito-tech-mi-backend-trainee-assignment
    - cd avito-tech-mi-backend-trainee-assignment
    - docker-compose up -d
+   - go to  http://localhost:9000/docs#/

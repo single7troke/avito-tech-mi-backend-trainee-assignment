@@ -35,7 +35,7 @@ class Add(BaseModel):
     region: str = Field(...,  example="moskva")
 
 
-@app.post("/add", response_model=AddResponse, tags=["add"])
+@app.post("/add", response_model=AddResponse, tags=["queries"])
 def add(input_data: Add, background: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Сохраняет количество объявлений по поисковой фразе.
@@ -63,7 +63,7 @@ def add(input_data: Add, background: BackgroundTasks, db: Session = Depends(get_
     return {"id": new_search.id}
 
 
-@app.get("/stat", response_model=StatResponse, tags=["statistic"])
+@app.get("/stat", response_model=StatResponse, tags=["mutations"])
 def stat(search_id: int = Query(..., example="id связки search_phrase + region"),
          start: str = Query(None, example="время в формате '%Y-%m-%dT%H'", max_length=13),
          stop: str = Query(None, example="время в формате '%Y-%m-%dT%H'", max_length=13),
@@ -86,7 +86,7 @@ def stat(search_id: int = Query(..., example="id связки search_phrase + re
     return {"statistic": result}
 
 
-@app.get("/top5", response_model=Top5Response, tags=["statistic"])
+@app.get("/top5", response_model=Top5Response, tags=["mutations"])
 def top_five(search_id: int = Query(..., example="id связки search_phrase + region"),
              time: str = Query(..., example="время в формате '%Y-%m-%dT%H'", max_length=13),
              db: Session = Depends(get_db)):
